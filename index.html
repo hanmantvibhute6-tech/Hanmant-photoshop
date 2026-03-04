@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Image Compressor</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --primary-hover: #45a049;
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            margin-top: 0;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #fdfdfd;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+        }
+
+        .file-input-wrapper {
+            text-align: center;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            width: 90%;
+            cursor: pointer;
+        }
+
+        .quality-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .quality-wrapper input[type="range"] {
+            flex-grow: 1;
+        }
+
+        .preview-area {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            display: none; /* Hidden until image is uploaded */
+        }
+
+        .image-box {
+            flex: 1;
+            text-align: center;
+            background: #fafafa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .image-box img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .size-info {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            display: inline-block;
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #downloadBtn {
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            display: none; /* Hidden until image is processed */
+        }
+
+        @media (max-width: 600px) {
+            .preview-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Image Compressor</h1>
+        
+        <div class="controls">
+            <div class="file-input-wrapper">
+                <input type="file" id="uploadInput" accept="image/png, image/jpeg, image/webp">
+            </div>
+            
+            <div class="quality-wrapper">
+                <label for="qualitySlider">Compression Quality:</label>
+                <input type="range" id="qualitySlider" min="0.1" max="1" step="0.1" value="0.7">
+                <span id="qualityValue">70%</span>
+            </div>
+        </div>
+
+        <div class="preview-area" id="previewArea">
+            <div class="image-box">
+                <h3>Original</h3>
+                <img id="originalImg" src="" alt="Original Preview">
+                <div class="size-info" id="originalSize">Size: 0 KB</div>
+            </div>
+            <div class="image-box">
+                <h3>Compressed</h3>
+                <img id="compressedImg" src="" alt="Compressed Preview">
+                <div class="size-info" id="compressedSize">Size: 0 KB</div>
+            </div>
+        </div>
+
+        <a id="downloadBtn" class="btn" download="compressed-image.jpg">Download Compressed Image</a>
+    </div>
+
+    <script>
+        const uploadInput = document.getElementById('uploadInput');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const qualityValue = document.getElementById('qualityValue');
+        const previewArea = document.getElementById('previewArea');
+        const originalImg = document.getElementById('originalImg');
+        const compressedImg = document.getElementById('compressedImg');
+        const originalSize = document.getElementById('originalSize');
+        const compressedSize = document.getElementById('compressedSize');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let currentFile = null;
+
+        // Listen for file upload
+        uploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                currentFile = file;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    originalImg.src = e.target.result;
+                    originalSize.textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+                    
+                    // Show preview area
+                    previewArea.style.display = 'flex';
+                    
+                    // Once original image loads, compress it
+                    originalImg.onload = function() {
+                        compressImage();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Listen for quality slider change
+        qualitySlider.addEventListener('input', function(event) {
+            const quality = parseFloat(event.target.value);
+            qualityValue.textContent = `${Math.round(quality * 100)}%`;
+            if (currentFile) {
+                compressImage();
+            }
+        });
+
+        // Function to compress image using Canvas
+        function compressImage() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const quality = parseFloat(qualitySlider.value);
+
+            // Set canvas dimensions to match image
+            canvas.width = originalImg.naturalWidth;
+            canvas.height = originalImg.naturalHeight;
+
+            // Draw image on canvas
+            ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to compressed JPEG Data URL
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+            
+            // Set compressed image preview
+            compressedImg.src = compressedDataUrl;
+
+            // Calculate compressed size
+            // Data URL string length roughly translates to base64 size. 
+            // Formula: (string_length * 3/4) bytes
+            const base64str = compressedDataUrl.split(',')[1];
+            const compressedBytes = atob(base64str).length;
+            compressedSize.textContent = `Size: ${(compressedBytes / 1024).toFixed(2)} KB`;
+
+            // Enable download button
+            downloadBtn.href = compressedDataUrl;
+            
+            // Generate a smart filename
+            const originalName = currentFile.name.split('.')[0];
+            downloadBtn.download = `${originalName}-compressed.jpg`;
+            downloadBtn.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Image Compressor</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --primary-hover: #45a049;
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            margin-top: 0;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #fdfdfd;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+        }
+
+        .file-input-wrapper {
+            text-align: center;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            width: 90%;
+            cursor: pointer;
+        }
+
+        .quality-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .quality-wrapper input[type="range"] {
+            flex-grow: 1;
+        }
+
+        .preview-area {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            display: none; /* Hidden until image is uploaded */
+        }
+
+        .image-box {
+            flex: 1;
+            text-align: center;
+            background: #fafafa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .image-box img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .size-info {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            display: inline-block;
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #downloadBtn {
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            display: none; /* Hidden until image is processed */
+        }
+
+        @media (max-width: 600px) {
+            .preview-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Image Compressor</h1>
+        
+        <div class="controls">
+            <div class="file-input-wrapper">
+                <input type="file" id="uploadInput" accept="image/png, image/jpeg, image/webp">
+            </div>
+            
+            <div class="quality-wrapper">
+                <label for="qualitySlider">Compression Quality:</label>
+                <input type="range" id="qualitySlider" min="0.1" max="1" step="0.1" value="0.7">
+                <span id="qualityValue">70%</span>
+            </div>
+        </div>
+
+        <div class="preview-area" id="previewArea">
+            <div class="image-box">
+                <h3>Original</h3>
+                <img id="originalImg" src="" alt="Original Preview">
+                <div class="size-info" id="originalSize">Size: 0 KB</div>
+            </div>
+            <div class="image-box">
+                <h3>Compressed</h3>
+                <img id="compressedImg" src="" alt="Compressed Preview">
+                <div class="size-info" id="compressedSize">Size: 0 KB</div>
+            </div>
+        </div>
+
+        <a id="downloadBtn" class="btn" download="compressed-image.jpg">Download Compressed Image</a>
+    </div>
+
+    <script>
+        const uploadInput = document.getElementById('uploadInput');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const qualityValue = document.getElementById('qualityValue');
+        const previewArea = document.getElementById('previewArea');
+        const originalImg = document.getElementById('originalImg');
+        const compressedImg = document.getElementById('compressedImg');
+        const originalSize = document.getElementById('originalSize');
+        const compressedSize = document.getElementById('compressedSize');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let currentFile = null;
+
+        // Listen for file upload
+        uploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                currentFile = file;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    originalImg.src = e.target.result;
+                    originalSize.textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+                    
+                    // Show preview area
+                    previewArea.style.display = 'flex';
+                    
+                    // Once original image loads, compress it
+                    originalImg.onload = function() {
+                        compressImage();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Listen for quality slider change
+        qualitySlider.addEventListener('input', function(event) {
+            const quality = parseFloat(event.target.value);
+            qualityValue.textContent = `${Math.round(quality * 100)}%`;
+            if (currentFile) {
+                compressImage();
+            }
+        });
+
+        // Function to compress image using Canvas
+        function compressImage() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const quality = parseFloat(qualitySlider.value);
+
+            // Set canvas dimensions to match image
+            canvas.width = originalImg.naturalWidth;
+            canvas.height = originalImg.naturalHeight;
+
+            // Draw image on canvas
+            ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to compressed JPEG Data URL
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+            
+            // Set compressed image preview
+            compressedImg.src = compressedDataUrl;
+
+            // Calculate compressed size
+            // Data URL string length roughly translates to base64 size. 
+            // Formula: (string_length * 3/4) bytes
+            const base64str = compressedDataUrl.split(',')[1];
+            const compressedBytes = atob(base64str).length;
+            compressedSize.textContent = `Size: ${(compressedBytes / 1024).toFixed(2)} KB`;
+
+            // Enable download button
+            downloadBtn.href = compressedDataUrl;
+            
+            // Generate a smart filename
+            const originalName = currentFile.name.split('.')[0];
+            downloadBtn.download = `${originalName}-compressed.jpg`;
+            downloadBtn.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
